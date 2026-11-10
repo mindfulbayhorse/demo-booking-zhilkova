@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StorePostRequest;
 use App\Models\Booking;
 use App\Models\Room;
+use App\Services\BookingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BookingController extends Controller
 {
+    public function __construct(private BookingService $bookingService) {}
+
     public function index(Request $request)
     {
         return Booking::where('user_id', $request->user()->id)
@@ -18,23 +21,28 @@ class BookingController extends Controller
             ->paginate(20);
     }
 
-    public function store(Request $request)
+    public function store(StorePostRequest $request)
     {
-        $conflict = DB::select("SELECT id FROM bookings
-            WHERE room_id = {$request->room_id}
-            AND starts_at <= '{$request->ends_at}'
-            AND ends_at >= '{$request->starts_at}'");
+        $validated = $request->validated();
 
-        if ($conflict) {
+        if ($this->bookingService->hasConflict($validated['room_id'], $validated['starts_at'],
+        $validated['ends_at'])) {
             return response()->json(['error' => 'Комната занята'], 409);
         }
 
         $start = Carbon::parse($request->starts_at);
+        $end = Carbon::parse($request->ends_at);
         if ($start->hour < 9 || $start->hour >= 20) {
             return response()->json(['error' => 'Нерабочее время'], 422);
         }
 
-        $booking = Booking::create($request->all());
+        if (!$this->bookingService->hasDuration($start, $end)){
+            return response()->json(
+                ['error' => $this->bookingService::ERROR_BOOKING_DURATION], 422);
+        }
+
+        $validated['user_id']=auth()->id();
+        $booking = Booking::create($validated);
 
         Log::withContext(['booking_id' => $booking->id]);
         Log::channel('bookings')->info('Booking created');
@@ -55,7 +63,7 @@ class BookingController extends Controller
             ->whereDate('starts_at', today())
             ->get()
             ->map(fn ($b) => [
-                'time' => $b->starts_at . ' – ' . $b->ends_at,
+                'time' => $b->starts_at.' – '.$b->ends_at,
                 'author' => $b->user->name,
             ]);
     }
