@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\Room;
 use App\Services\BookingService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -30,8 +31,8 @@ class BookingController extends Controller
             return response()->json(['error' => 'Комната занята'], 409);
         }
 
-        $start = Carbon::parse($request->starts_at);
-        $end = Carbon::parse($request->ends_at);
+        $start = Carbon::parse($validated['starts_at']);
+        $end = Carbon::parse($validated['ends_at']);
         if ($start->hour < 9 || $start->hour >= 20) {
             return response()->json(['error' => 'Нерабочее время'], 422);
         }
@@ -41,7 +42,13 @@ class BookingController extends Controller
                 ['error' => $this->bookingService::ERROR_BOOKING_DURATION], 422);
         }
 
-        $validated['user_id']=auth()->id();
+        if (!$this->bookingService->hasCorrectInterval($start, $end)) {
+            return response()->json(
+                ['error' => $this->bookingService::ERROR_BOOKING_INTERVAL], 422
+            );
+        }
+
+        $validated['user_id'] = auth()->id();
         $booking = Booking::create($validated);
 
         Log::withContext(['booking_id' => $booking->id]);
@@ -50,9 +57,16 @@ class BookingController extends Controller
         return $booking;
     }
 
-    public function destroy($id)
+    public function destroy(int $id)
     {
-        Booking::findOrFail($id)->delete();
+        $booking = DB::table('bookings')->where([
+            'user_id' => auth()->user()->id,
+            'id' => $id,
+        ])->get();
+
+        if ($booking->isEmpty()) {
+            return response()->json(['error' => 'Booking not found'], 404);
+        }
 
         return response()->noContent();
     }
