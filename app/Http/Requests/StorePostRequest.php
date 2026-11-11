@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\BookingISOTimeStandart;
 use App\Validation\BookingDurationValidation;
 use App\Validation\BookingStepValidation;
 use App\Validation\BookingWorkingTimeValidation;
@@ -71,7 +72,7 @@ class StorePostRequest extends FormRequest
         return [
             new BookingWorkingTimeValidation,
             new BookingStepValidation,
-            new BookingDurationValidation
+            new BookingDurationValidation,
         ];
 
     }

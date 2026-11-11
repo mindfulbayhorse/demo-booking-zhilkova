@@ -6,8 +6,7 @@ use App\Http\Requests\StorePostRequest;
 use App\Models\Booking;
 use App\Models\Room;
 use App\Services\BookingService;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -26,13 +25,15 @@ class BookingController extends Controller
     {
         $validated = $request->validated();
 
-        if ($this->bookingService->hasConflict($validated['room_id'], $validated['starts_at'],
-        $validated['ends_at'])) {
-            return response()->json(['error' => 'Комната занята'], 409);
+        if ($this->bookingService->hasConflict($validated)) {
+            return response()->json(['error' => $this->bookingService::ERROR_BOOKING_CONFLICT], 409);
         }
 
-        $validated['user_id'] = auth()->id();
-        $booking = Booking::create($validated);
+        try {
+            $booking = $this->bookingService->addBooking($validated);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Ошибка при создании бронирования'], 500);
+        }
 
         Log::withContext(['booking_id' => $booking->id]);
         Log::channel('bookings')->info('Booking created');
@@ -42,13 +43,20 @@ class BookingController extends Controller
 
     public function destroy(int $id)
     {
-        $booking = DB::table('bookings')->where([
-            'user_id' => auth()->user()->id,
-            'id' => $id,
-        ])->get();
+        try {
+            $booking = $this->bookingService->findBooking($id);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['error' => 'Данное бронирование не найдено'], 404);
+        }
 
-        if ($booking->isEmpty()) {
-            return response()->json(['error' => 'Booking not found'], 404);
+        if ($this->bookingService->checkAuthor($booking) === false) {
+            return response()->json(['error' => 'Вы не являетесь автором бронирования'], 403);
+        }
+
+        try {
+            $this->bookingService->deleteBooking($booking);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Ошибка при удалении бронирования'], 500);
         }
 
         return response()->noContent();

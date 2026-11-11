@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Http\Requests\StorePostRequest;
 use App\Models\Booking;
 use App\Models\Office;
 use App\Models\Room;
@@ -30,6 +29,135 @@ class BookingStoreTest extends TestCase
         $this->room = Room::factory()->for($office)->create();
     }
 
+
+    public function test_bookings_start_time_conflicts()
+    {
+        Sanctum::actingAs($this->user);
+
+        Booking::factory()->create([
+            'user_id' => $this->user->id,
+            'room_id' => $this->room->id,
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
+        ]);
+
+        $this->postJson('/api/bookings', [
+            'starts_at' => Carbon::parse('next monday')->setTime(12, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(15, 15)->toIso8601String(),
+            'room_id' => $this->room->id,
+            'title' => 'Test booking',
+        ])
+            ->assertStatus(409)
+            ->assertJson([
+                'error' => BookingService::ERROR_BOOKING_CONFLICT,
+            ]);
+    }
+
+    public function test_bookings_have_no_conflicts()
+    {
+        Sanctum::actingAs($this->user);
+
+        Booking::factory()->create([
+            'user_id' => $this->user->id,
+            'room_id' => $this->room->id,
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
+        ]);
+
+        $this->postJson('/api/bookings', [
+            'starts_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(15, 15)->toIso8601String(),
+            'room_id' => $this->room->id,
+            'title' => 'Test booking',
+        ])
+            ->assertStatus(201);
+    }
+
+    public function test_bookings_end_time_conflicts()
+    {
+        Sanctum::actingAs($this->user);
+
+        Booking::factory()->create([
+            'user_id' => $this->user->id,
+            'room_id' => $this->room->id,
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
+        ]);
+
+        $this->postJson('/api/bookings', [
+            'starts_at' => Carbon::parse('next monday')->setTime(9, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(10, 30)->toIso8601String(),
+            'room_id' => $this->room->id,
+            'title' => 'Test booking',
+        ])
+            ->assertStatus(409)
+            ->assertJson([
+                'error' => BookingService::ERROR_BOOKING_CONFLICT,
+            ]);
+    }
+
+
+    public function test_booking_is_created(): void
+    {
+        $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);
+
+        Sanctum::actingAs($this->user);
+
+        $this->postJson('/api/bookings', [
+            'starts_at' => $startsAt->toIso8601String(),
+            'ends_at' => $start->add('4 hours')->toIso8601String(),
+            'room_id' => $this->room->id,
+            'title' => 'Test booking',
+        ])
+            ->assertStatus(201);
+    }
+
+
+    public function test_booking_is_deleted_by_author(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $booking = Booking::factory()->create([
+            'user_id' => $this->user->id,
+            'room_id' => $this->room->id,
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
+        ]);
+
+        $this->deleteJson('/api/bookings/' . $booking->id)
+            ->assertNoContent();
+
+    }
+
+    public function test_booking_is_not_found(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $this->deleteJson('/api/bookings/' . 500)
+            ->assertNotFound();
+
+    }
+
+
+    public function test_booking_cannot_be_deleted_by_another_user(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $booking = Booking::factory()->create([
+            'user_id' => $this->user->id,
+            'room_id' => $this->room->id,
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
+        ]);
+
+        $user2 = User::factory()->create();
+        Sanctum::actingAs($user2);
+
+        $this->deleteJson('/api/bookings/' . $booking->id)
+            ->assertStatus(403);
+
+    }
+
     public function test_store_rejects_invalid_booking_dates(): void
     {
         Sanctum::actingAs($this->user);
@@ -43,100 +171,16 @@ class BookingStoreTest extends TestCase
             ->assertJsonValidationErrors(['starts_at', 'ends_at']);
     }
 
-    public function test_store_uses_booking_step_message_when_start_time_is_not_on_step(): void
+
+    public function test_booking_with_timezone_offset_created(): void
     {
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/bookings', [
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 37)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 30)->toIso8601String(),
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->setTimezone(2)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->setTimezone(2)->toIso8601String(),
             'room_id' => $this->room->id,
             'title' => 'Test booking',
-        ])
-            ->assertUnprocessable()
-            ->assertJsonPath('message', StorePostRequest::ERROR_MESS_TIME)
-            ->assertJsonValidationErrors(['starts_at']);
-    }
-
-    public function test_booking_lasts_4_hours_only(): void
-    {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);
-
-        Sanctum::actingAs($this->user);
-
-        $this->postJson('/api/bookings', [
-            'starts_at' => $startsAt->toIso8601String(),
-            'ends_at' => $start->add('4 hours')->toIso8601String(),
-            'room_id' => $this->room->id,
-            'title' => 'Test booking',
-        ])
-            ->assertStatus(201);
-    }
-
-    public function test_booking_has_incorrect_duration(): void
-    {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);
-
-        Sanctum::actingAs($this->user);
-
-        $this->postJson('/api/bookings', [
-            'starts_at' => $startsAt->toIso8601String(),
-            'ends_at' => $start->add('4 hours 1 minute')->toIso8601String(),
-            'room_id' => $this->room->id,
-            'title' => 'Test booking',
-        ])
-            ->assertStatus(422)
-            ->assertJson([
-                'error' => BookingService::ERROR_BOOKING_DURATION,
-            ]);
-    }
-
-    public function test_booking_has_correct_intervals(): void
-    {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(10, 15);
-
-        Sanctum::actingAs($this->user);
-
-        $this->postJson('/api/bookings', [
-            'starts_at' => $startsAt->toIso8601String(),
-            'ends_at' => $start->add('4 hours')->toIso8601String(),
-            'room_id' => $this->room->id,
-            'title' => 'Test booking',
-        ])
-            ->assertStatus(201);
-    }
-
-    public function test_booking_has_wrong_time_interval(): void
-    {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(10, 37);
-
-        Sanctum::actingAs($this->user);
-
-        $this->postJson('/api/bookings', [
-            'starts_at' => $startsAt->toIso8601String()
-        ])->assertStatus(422)
-            ->assertJsonValidationErrors(['starts_at']);
-    }
-
-    public function test_bookings_have_conflict()
-    {
-
-        $booking = Booking::factory()->create([
-            'user_id' => $this->user->id,
-            'room_id' => $this->room->id,
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
-        ]);
-
-        $request = $this->postJson('/api/bookings', [
-            'starts_at' => Carbon::parse('next monday')->setTime(12, 15)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(15, 15)->toIso8601String(),
-            'room_id' => $this->room->id,
-            'title' => 'Test booking',
-        ])
-            ->assertStatus(422)
-            ->assertJson([
-                'error' => BookingService::ERROR_BOOKING_CONFLICT,
-            ]);
+        ])->assertCreated();
     }
 }

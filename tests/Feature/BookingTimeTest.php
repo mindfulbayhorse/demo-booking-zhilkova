@@ -108,22 +108,6 @@ class BookingTimeTest extends TestCase
             ->assertJsonPath('errors.ends_at', [BookingStepValidation::ERROR_WRONG_END_TIME_STEP]);;
     }
 
-
-    public function test_booking_lasts_4_hours_only(): void
-    {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);
-
-        Sanctum::actingAs($this->user);
-
-        $this->postJson('/api/bookings', [
-            'starts_at' => $startsAt->toIso8601String(),
-            'ends_at' => $start->add('4 hours')->toIso8601String(),
-            'room_id' => $this->room->id,
-            'title' => 'Test booking',
-        ])
-            ->assertStatus(201);
-    }
-
     public function test_booking_has_incorrect_duration(): void
     {
         $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);

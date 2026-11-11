@@ -3,41 +3,76 @@
 namespace App\Services;
 
 use App\Models\Booking;
-use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
+/**
+ *  Class BookingService includes methods for booking management
+ * @author Olga Zhilkova
+ */
 class BookingService
 {
-    const ERROR_BOOKING_DURATION = 'Время бронирования не должно превышать 4 часов';
+    public const ERROR_BOOKING_CONFLICT = 'Переговорная в этот промежуток времени занята';
 
-    const ERROR_BOOKING_INTERVAL = 'Бронирование должно иметь шаг в 15 минут';
-
-    public function hasConflict(int $roomId, string $startsAt, string $endsAt): bool
+    /**
+     * @param array $data
+     * @return bool
+     */
+    public function hasConflict(array $data): bool
     {
         return Booking::query()
-            ->where('room_id', $roomId)
-            ->where('starts_at', '<=', $endsAt)
-            ->where('ends_at', '>=', $startsAt)
+            ->where('room_id', $data['room_id'])
+            ->where('starts_at', '<', $data['ends_at'])
+            ->where('ends_at', '>', $data['starts_at'])
             ->exists();
     }
 
     /**
-     * Проверяет, что время бронирования не превышает 4 часа
-     * @param Carbon $startsAt
-     * @param Carbon $endsAt
+     * @param array $data
+     * @return Booking
+     */
+    public function addBooking(array $data): Booking
+    {
+        $booking = new Booking();
+        $booking->room_id = $data['room_id'];
+        $booking->starts_at = $data['starts_at'];
+        $booking->ends_at = $data['ends_at'];
+        $booking->title = $data['title'];
+        $booking->user_id = auth()->id();
+        $booking->save();
+
+        return $booking;
+    }
+
+    /**
+     * @param $id
+     * @return bool|Booking
+     * @throws ModelNotFoundException
+     */
+    public function findBooking($id): Booking
+    {
+        return Booking::findOrFail($id);
+    }
+
+    /**
+     * @param Booking $booking
      * @return bool
      */
-    public function hasDuration(Carbon $startsAt, Carbon $endsAt): bool
+    public function checkAuthor(Booking $booking): bool
     {
-        return ($startsAt->diffinMinutes($endsAt) <= 4*60 ? true : false);
+        if ($booking->user_id !== auth()->id()) {
+            return false;
+        }
+
+        return true;
     }
 
-    public function hasCorrectInterval(Carbon $start, Carbon $end): bool
+    /**
+     * @param Booking $booking
+     * @return bool
+     */
+    public function deleteBooking(Booking $booking): bool
     {
-        return $this->hasTimeDivisibleBy15Minutes($start) && $this->hasTimeDivisibleBy15Minutes($end);
+        return $booking->delete();
     }
 
-    public function hasTimeDivisibleBy15Minutes(Carbon $time): bool
-    {
-        return ($time->minute % 15 === 0) && ($time->second === 0);
-    }
 }
