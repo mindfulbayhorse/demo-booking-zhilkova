@@ -24,6 +24,12 @@ docker compose exec app php artisan migrate:fresh --seed
 docker compose exec app php artisan test
 ```
 
+## Окончание работы
+
+```sh
+docker compose down
+```
+
 Тесты идут на PostgreSQL в отдельной базе `testing`.
 
 ## Данные сидера
