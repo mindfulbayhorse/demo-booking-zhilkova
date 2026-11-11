@@ -42,12 +42,6 @@ class BookingController extends Controller
                 ['error' => $this->bookingService::ERROR_BOOKING_DURATION], 422);
         }
 
-        if (!$this->bookingService->hasCorrectInterval($start, $end)) {
-            return response()->json(
-                ['error' => $this->bookingService::ERROR_BOOKING_INTERVAL], 422
-            );
-        }
-
         $validated['user_id'] = auth()->id();
         $booking = Booking::create($validated);
 
