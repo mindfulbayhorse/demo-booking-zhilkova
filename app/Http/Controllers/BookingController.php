@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exeptions\BookingExeption;
 use App\Http\Requests\StorePostRequest;
 use App\Models\Booking;
 use App\Models\Room;
@@ -9,6 +10,8 @@ use App\Services\BookingService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use \Throwable;
 
 class BookingController extends Controller
 {
@@ -24,19 +27,27 @@ class BookingController extends Controller
     public function store(StorePostRequest $request)
     {
         $validated = $request->validated();
+        $lock = Cache::lock("booking-{$validated['room_id']}-{$validated['starts_at']}-{$validated['ends_at']}", 2);
 
-        if ($this->bookingService->hasConflict($validated)) {
-            return response()->json(['error' => $this->bookingService::ERROR_BOOKING_CONFLICT], 409);
+        if (!$lock->get()) {
+            return response()->json(['message' => 'Бронирование с теми же данными уже в процессе, попробуйте позже'], 409);
         }
 
         try {
+            if ($this->bookingService->hasConflict($validated)) {
+                throw new BookingExeption();
+            }
             $booking = $this->bookingService->addBooking($validated);
-        } catch (\Exception $e) {
-            return response()->json(['error' => 'Ошибка при создании бронирования'], 500);
-        }
+            Log::withContext(['booking_id' => $booking->id]);
+            Log::channel('bookings')->info('Booking created');
 
-        Log::withContext(['booking_id' => $booking->id]);
-        Log::channel('bookings')->info('Booking created');
+        } catch (BookingExeption $e) {
+            return response()->json(['error' => $this->bookingService::ERROR_BOOKING_CONFLICT], 409);
+        } catch (Throwable) {
+            return response()->json(['error' => $this->bookingService::ERROR_BOOKING_ERROR], 500);
+        } finally {
+            $lock->release();
+        }
 
         return $booking;
     }

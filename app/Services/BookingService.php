@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 /**
  *  Class BookingService includes methods for booking management
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 class BookingService
 {
     public const ERROR_BOOKING_CONFLICT = 'Переговорная в этот промежуток времени занята';
+
+    public const ERROR_BOOKING_ERROR = 'Ошибка в обработке запроса';
 
     /**
      * @param array $data
@@ -32,13 +35,13 @@ class BookingService
      */
     public function addBooking(array $data): Booking
     {
-        $booking = new Booking();
-        $booking->room_id = $data['room_id'];
-        $booking->starts_at = $data['starts_at'];
-        $booking->ends_at = $data['ends_at'];
-        $booking->title = $data['title'];
-        $booking->user_id = auth()->id();
-        $booking->save();
+        $data['user_id'] = auth()->id();
+
+        $booking = DB::transaction(function () use ($data) {
+            $booking = Booking::create($data);
+
+            return $booking; // Returns the Eloquent model out of the transaction
+        });
 
         return $booking;
     }
