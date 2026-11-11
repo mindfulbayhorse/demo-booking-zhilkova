@@ -31,17 +31,6 @@ class BookingController extends Controller
             return response()->json(['error' => 'Комната занята'], 409);
         }
 
-        $start = Carbon::parse($validated['starts_at']);
-        $end = Carbon::parse($validated['ends_at']);
-        if ($start->hour < 9 || $start->hour >= 20) {
-            return response()->json(['error' => 'Нерабочее время'], 422);
-        }
-
-        if (!$this->bookingService->hasDuration($start, $end)){
-            return response()->json(
-                ['error' => $this->bookingService::ERROR_BOOKING_DURATION], 422);
-        }
-
         $validated['user_id'] = auth()->id();
         $booking = Booking::create($validated);
 

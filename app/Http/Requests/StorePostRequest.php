@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
-use App\Rules\BookingStep;
+use App\Validation\BookingDurationValidation;
+use App\Validation\BookingStepValidation;
+use App\Validation\BookingWorkingTimeValidation;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,10 +12,6 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StorePostRequest extends FormRequest
 {
-    protected $stopOnFirstFailure = true;
-
-    const ERROR_MESS_TIME = 'Некорректное время бронирования';
-
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -40,8 +38,8 @@ class StorePostRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'starts_at' => ['required', 'date', new BookingStep],
-            'ends_at' => ['required', 'date', 'after:starts_at', new BookingStep],
+            'starts_at' => ['required', 'date'],
+            'ends_at' => ['required', 'date', 'after:starts_at'],
             'room_id' => 'required|integer',
             'title' => 'required|string',
         ];
@@ -53,8 +51,27 @@ class StorePostRequest extends FormRequest
         return [
             'starts_at.required' => 'Время начала обязательно для заполнения',
             'ends_at.required' => 'Время окончания обязательно для заполнения',
+            'starts_at.date' => 'Время начала должно быть датой',
+            'ends_at.date' => 'Время окончания должно быть датой',
+            'ends_at.after' => 'Время окончания должно быть после времени начала',
             'room_id.required' => 'Id переговорной обязательно',
+            'room_id.integer' => 'Id переговорной должно быть целым числом',
+            'title.string' => 'Название бронирования должно быть строкой',
             'title.required' => 'Название бронирования обязательно для заполнения',
+        ];
+
+    }
+
+    /**
+     * Get the "after" validation callables for the request.
+     */
+    public function after(): array
+    {
+
+        return [
+            new BookingWorkingTimeValidation,
+            new BookingStepValidation,
+            new BookingDurationValidation
         ];
 
     }
