@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Rules\BookingISOTimeStandart;
+use App\Models\Room;
 use App\Validation\BookingDurationValidation;
 use App\Validation\BookingStepValidation;
 use App\Validation\BookingWorkingTimeValidation;
@@ -38,10 +38,12 @@ class StorePostRequest extends FormRequest
      */
     public function rules(): array
     {
+        $room = Room::with('office')->findOrFail($this->input('room_id'));
+        $timezone = $room->office->timezone;
         return [
-            'starts_at' => ['required', 'date'],
-            'ends_at' => ['required', 'date', 'after:starts_at'],
-            'room_id' => 'required|integer',
+            'starts_at' => ['required', 'date', 'date_format:Y-m-d\TH:i:sP'],
+            'ends_at' => ['required', 'date', 'date_format:Y-m-d\TH:i:sP', 'after:starts_at'],
+            'room_id' => 'required|integer|exists:' . Room::class . ',id',
             'title' => 'required|string',
         ];
     }
@@ -57,8 +59,11 @@ class StorePostRequest extends FormRequest
             'ends_at.after' => 'Время окончания должно быть после времени начала',
             'room_id.required' => 'Id переговорной обязательно',
             'room_id.integer' => 'Id переговорной должно быть целым числом',
+            'room_id.exists' => 'Переговорная с таким id не найдена',
             'title.string' => 'Название бронирования должно быть строкой',
             'title.required' => 'Название бронирования обязательно для заполнения',
+            'starts_at.date_format' => 'Время начала должно быть в формате ISO 8601',
+            'ends_at.date_format' => 'Время окончания должно быть в формате ISO 8601',
         ];
 
     }

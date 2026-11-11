@@ -26,23 +26,23 @@ class BookingTimeTest extends TestCase
         parent::setUp();
 
         $this->user = User::factory()->create();
-        $office = Office::factory()->create();
-        $this->room = Room::factory()->for($office)->create();
+        $this->office = Office::factory()->create(['timezone' => 'Europe/Moscow']);
+        $this->room = Room::factory()->for($this->office)->create();
+        $this->start = Carbon::parse('next monday')->setTimeZone('Europe/Moscow');
     }
 
-    public function test_booking_starts_outside_of_working_hours(): void
+    public function test_booking_starts_outside_of_office_working_hours(): void
     {
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/bookings', [
-            'starts_at' => Carbon::parse('next monday')->setTime(8, 0)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(12, 0)->toIso8601String(),
+            'starts_at' => $this->start->setTime(5, 0)->toIso8601String(),
+            'ends_at' => $this->start->add('4 hours')->toIso8601String(),
             'room_id' => $this->room->id,
             'title' => 'Test booking',
         ])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['starts_at'])
-            ->assertJsonPath('errors.starts_at', [BookingWorkingTimeValidation::ERROR_START_OUTSIDE_WORKING_HOURS]);
+            ->assertJsonPath('errors.booking_time', [BookingWorkingTimeValidation::ERROR_OUTSIDE_WORKING_HOURS . " ({$this->room->office->timezone})"]);
     }
 
     public function test_booking_ends_outside_of_working_hours(): void
@@ -50,31 +50,27 @@ class BookingTimeTest extends TestCase
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/bookings', [
-            'starts_at' => Carbon::parse('next monday')->setTime(9, 0)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(21, 0)->toIso8601String(),
+            'starts_at' => $this->start->setTime(8, 0)->toIso8601String(),
+            'ends_at' => $this->start->setTime(21, 0)->toIso8601String(),
             'room_id' => $this->room->id,
             'title' => 'Test booking',
         ])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['ends_at'])
-            ->assertJsonPath('errors.ends_at', [BookingWorkingTimeValidation::ERROR_END_OUTSIDE_WORKING_HOURS]);;;
-    }
+            ->assertJsonPath('errors.booking_time', [BookingWorkingTimeValidation::ERROR_OUTSIDE_WORKING_HOURS . " ({$this->room->office->timezone})"]);
 
+    }
 
     public function test_booking_is_outside_of_working_hours(): void
     {
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/bookings', [
-            'starts_at' => Carbon::parse('next monday')->setTime(7, 0)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(21, 0)->toIso8601String(),
+            'starts_at' => $this->start->setTime(3, 0)->toIso8601String(),
+            'ends_at' => $this->start->setTime(20, 0)->toIso8601String(),
             'room_id' => $this->room->id,
             'title' => 'Test booking',
-        ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['starts_at', 'ends_at'])
-            ->assertJsonPath('errors.starts_at', [BookingWorkingTimeValidation::ERROR_START_OUTSIDE_WORKING_HOURS])
-            ->assertJsonPath('errors.ends_at', [BookingWorkingTimeValidation::ERROR_END_OUTSIDE_WORKING_HOURS]);;
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.booking_time', [BookingWorkingTimeValidation::ERROR_OUTSIDE_WORKING_HOURS . " ({$this->room->office->timezone})"]);;
     }
 
     public function test_start_time_is_not_on_correct_step(): void
@@ -110,7 +106,7 @@ class BookingTimeTest extends TestCase
 
     public function test_booking_has_incorrect_duration(): void
     {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);
+        $start = $startsAt = Carbon::parse('next monday')->setTime(10, 0)->setTimezone($this->office->timezone);
 
         Sanctum::actingAs($this->user);
 
@@ -121,8 +117,7 @@ class BookingTimeTest extends TestCase
             'title' => 'Test booking',
         ])
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['ends_at'])
-            ->assertJsonPath('errors.ends_at', [BookingDurationValidation::ERROR_WRONG_DURATION]);;
+            ->assertJsonPath('errors.booking_time', [BookingDurationValidation::ERROR_WRONG_DURATION]);
     }
 
 }

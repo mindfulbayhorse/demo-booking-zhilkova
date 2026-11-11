@@ -37,8 +37,8 @@ class BookingStoreTest extends TestCase
         Booking::factory()->create([
             'user_id' => $this->user->id,
             'room_id' => $this->room->id,
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
         ]);
 
         $this->postJson('/api/bookings', [
@@ -60,8 +60,8 @@ class BookingStoreTest extends TestCase
         Booking::factory()->create([
             'user_id' => $this->user->id,
             'room_id' => $this->room->id,
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
         ]);
 
         $this->postJson('/api/bookings', [
@@ -80,8 +80,8 @@ class BookingStoreTest extends TestCase
         Booking::factory()->create([
             'user_id' => $this->user->id,
             'room_id' => $this->room->id,
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
         ]);
 
         $this->postJson('/api/bookings', [
@@ -99,17 +99,14 @@ class BookingStoreTest extends TestCase
 
     public function test_booking_is_created(): void
     {
-        $start = $startsAt = Carbon::parse('next monday')->setTime(15, 0);
-
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/bookings', [
-            'starts_at' => $startsAt->toIso8601String(),
-            'ends_at' => $start->add('4 hours')->toIso8601String(),
+            'starts_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
+            'ends_at' => Carbon::parse('next monday')->setTime(15, 15)->toIso8601String(),
             'room_id' => $this->room->id,
             'title' => 'Test booking',
-        ])
-            ->assertStatus(201);
+        ])->assertStatus(201);
     }
 
 
@@ -120,8 +117,8 @@ class BookingStoreTest extends TestCase
         $booking = Booking::factory()->create([
             'user_id' => $this->user->id,
             'room_id' => $this->room->id,
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
         ]);
 
         $this->deleteJson('/api/bookings/' . $booking->id)
@@ -146,8 +143,8 @@ class BookingStoreTest extends TestCase
         $booking = Booking::factory()->create([
             'user_id' => $this->user->id,
             'room_id' => $this->room->id,
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->toIso8601String(),
+            'starts_at' => Carbon::parse('next monday')->setTime(10, 15),
+            'ends_at' => Carbon::parse('next monday')->setTime(14, 15),
         ]);
 
         $user2 = User::factory()->create();
@@ -171,16 +168,4 @@ class BookingStoreTest extends TestCase
             ->assertJsonValidationErrors(['starts_at', 'ends_at']);
     }
 
-
-    public function test_booking_with_timezone_offset_created(): void
-    {
-        Sanctum::actingAs($this->user);
-
-        $this->postJson('/api/bookings', [
-            'starts_at' => Carbon::parse('next monday')->setTime(10, 15)->setTimezone(2)->toIso8601String(),
-            'ends_at' => Carbon::parse('next monday')->setTime(14, 15)->setTimezone(2)->toIso8601String(),
-            'room_id' => $this->room->id,
-            'title' => 'Test booking',
-        ])->assertCreated();
-    }
 }

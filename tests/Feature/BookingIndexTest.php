@@ -30,4 +30,5 @@ class BookingIndexTest extends TestCase
     {
         $this->getJson('/api/bookings')->assertUnauthorized();
     }
+
 }
